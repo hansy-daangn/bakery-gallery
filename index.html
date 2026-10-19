@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>빵집 사장님 갤러리</title>
+<style>
+/* 레이아웃: 세로 1열 피드, 카드 = 16:9 시트 + 한 줄 메타(코드명 · 폴더 · 👎 👍). 라이트 고정 */
+:root{--bg:#faf8f5;--fg:#1f1b17;--mut:#8a7f74;--line:#eae4dc;--card:#fff;--up:#d9480f;--down:#5c6b7a;--chip:#f2ede6;color-scheme:light}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",sans-serif}
+body{background:var(--bg)}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:rgba(250,248,245,.94);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:8px max(12px,env(safe-area-inset-right,0px)) 8px max(12px,env(safe-area-inset-left,0px))}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+h1{font-size:15px;margin:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+select,button.pill{appearance:none;border:1px solid var(--line);background:#fff;color:var(--fg);border-radius:999px;padding:6px 12px;font:inherit;font-size:13px;line-height:1.2}
+button.pill.on{background:var(--fg);border-color:var(--fg);color:#fff}
+.cnt{font-size:12px;color:var(--mut);font-variant-numeric:tabular-nums}
+main{padding:10px 0 70px;max-width:720px;margin:0 auto}
+.card{position:relative;background:var(--card);margin:0 0 10px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.card img{display:block;width:100%;max-width:100%;aspect-ratio:16/9;object-fit:cover;background:#eee;user-select:none;-webkit-user-select:none}
+.card.down img{opacity:.45}
+.meta{display:flex;align-items:center;padding:4px 8px 4px 12px;gap:8px;font-size:13px;color:var(--mut)}
+.tag{font-weight:600;color:var(--fg)}
+.vb{border:1px solid var(--line);background:#fff;border-radius:999px;font-size:18px;line-height:1;padding:7px 12px;min-width:48px;min-height:40px}
+.vb.up{margin-left:auto}
+.vb.up.on{background:var(--up);border-color:var(--up)}
+.vb.down.on{background:var(--down);border-color:var(--down)}
+.big{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%) scale(.3);font-size:96px;opacity:0;pointer-events:none;filter:drop-shadow(0 2px 12px rgba(0,0,0,.4));transition:all .35s}
+.big.go{opacity:1;transform:translate(-50%,-50%) scale(1)}
+.empty{text-align:center;color:var(--mut);padding:60px 20px}
+#more{height:40px;text-align:center;color:var(--mut);font-size:12px}
+#lb{position:fixed;inset:0;background:#000;z-index:20;display:none;overflow:auto;-webkit-overflow-scrolling:touch}
+#lb.on{display:flex;align-items:center;justify-content:center}
+#lb img{max-width:100%;max-height:100%;object-fit:contain}
+#lb .x{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));right:calc(12px + env(safe-area-inset-right,0px));color:#fff;font-size:28px;background:rgba(0,0,0,.4);border:0;border-radius:50%;width:40px;height:40px}
+#lb .t{position:fixed;left:calc(12px + env(safe-area-inset-left,0px));bottom:calc(14px + env(safe-area-inset-bottom,0px));color:#fff;font-size:13px;background:rgba(0,0,0,.45);padding:4px 10px;border-radius:999px}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:#1f1b17;color:#fff;font-size:13px;padding:8px 14px;border-radius:999px;opacity:0;transition:.2s;pointer-events:none;z-index:30}
+.toast.on{opacity:1}
+button:focus-visible,select:focus-visible{outline:2px solid var(--up);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){.big,.toast{transition:none}}
+</style></head>
+<body>
+<header>
+ <div class="row">
+  <h1 id="ttl">1인 빵집 사장님</h1>
+  <select id="fsel" aria-label="폴더"></select>
+  <button class="pill" id="fup">👍만</button>
+  <button class="pill" id="fdn">👎만</button>
+ </div>
+ <div class="row" style="margin-top:6px"><span class="cnt" id="cnt"></span></div>
+</header>
+<main id="list"></main>
+<div id="more"></div>
+<div id="lb"><button class="x" id="lbx" aria-label="닫기">×</button><img id="lbi" alt=""><span class="t" id="lbt"></span></div>
+<div class="toast" id="toast"></div>
+<script>
+const API='https://newoydegfbnnqujgiips.supabase.co/functions/v1/hfq-gallery';
+const api=(p,o)=>fetch(API+'?api='+p+(o&&o.q?'&'+o.q:''),o&&o.body?{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(o.body)}:{}).then(r=>{if(!r.ok)throw new Error(r.status);return r.json()});
+const $=s=>document.querySelector(s);
+let folders=[],folder='',vf=0,next=null,loading=false,maxId=0,items=new Map();
+let name='';try{name=localStorage.getItem('hfg_name')||''}catch(e){}
+function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('on'),1400)}
+function card(it){const d=document.createElement('div');d.className='card';d.dataset.id=it.id;
+ d.innerHTML='<img loading="lazy" decoding="async" alt=""><div class="big">👍</div><div class="meta"><span class="tag"></span><span class="f"></span><button class="vb up" aria-label="좋아요">👍</button><button class="vb down" aria-label="별로">👎</button></div>';
+ d.querySelector('img').src=it.min;d.querySelector('.tag').textContent=it.tag;d.querySelector('.f').textContent=it.folder;
+ const img=d.querySelector('img');let last=0,tm=null;
+ img.addEventListener('click',()=>{const now=Date.now();if(now-last<320){clearTimeout(tm);last=0;vote(it,it.vote===1?0:1,d,true);}else{last=now;tm=setTimeout(()=>{last=0;open(it)},330);}});
+ d.querySelector('.vb.up').addEventListener('click',()=>vote(it,it.vote===1?0:1,d,false));
+ d.querySelector('.vb.down').addEventListener('click',()=>vote(it,it.vote===-1?0:-1,d,false));
+ paint(it,d);return d}
+function paint(it,d){d.querySelector('.vb.up').classList.toggle('on',it.vote===1);d.querySelector('.vb.down').classList.toggle('on',it.vote===-1);d.classList.toggle('down',it.vote===-1)}
+async function vote(it,v,d,anim){if(anim&&v===1){const big=d.querySelector('.big');big.classList.add('go');setTimeout(()=>big.classList.remove('go'),700)}
+ const prev=it.vote;it.vote=v;paint(it,d);
+ try{await api('vote',{body:{id:it.id,vote:v,by:name}});toast(v===1?'👍 좋아요':v===-1?'👎 별로':'취소')}catch(e){it.vote=prev;paint(it,d);toast('저장 실패')}
+ if(vf&&v!==vf){d.remove()}}
+function open(it){$('#lbi').src=it.url;$('#lbt').textContent=it.tag+' · '+it.folder;$('#lb').classList.add('on')}
+$('#lbx').onclick=()=>{$('#lb').classList.remove('on');$('#lbi').src=''};
+$('#lb').addEventListener('click',e=>{if(e.target.id==='lb')$('#lbx').onclick()});
+function updCnt(){const f=folders.find(x=>x.id===folder);$('#cnt').textContent=(vf===1?'👍만 · ':vf===-1?'👎만 · ':'')+(f?f.name+' '+f.count+'장':'전체 '+folders.reduce((a,b)=>a+b.count,0)+'장')+' · 더블탭=👍 · 탭=크게'}
+function q(){return 'folder='+encodeURIComponent(folder)+'&vote='+vf}
+function fillSel(){const s=$('#fsel');const v=s.value;s.innerHTML='<option value="">전체 폴더</option>'+folders.map(f=>'<option value="'+f.id+'">'+f.name+' ('+f.count+')</option>').join('');s.value=v}
+async function load(reset){if(loading)return;loading=true;$('#more').textContent='불러오는 중…';
+ try{const r=await api('list',{q:q()+(reset?'':'&before='+next)});
+  if(reset){$('#list').innerHTML='';items.clear();maxId=0}
+  for(const it of r.items){items.set(it.id,it);$('#list').appendChild(card(it));maxId=Math.max(maxId,it.id)}
+  next=r.next;$('#more').textContent=next?'':(items.size?'끝':'');
+  if(!items.size)$('#list').innerHTML='<div class="empty">'+(vf?'아직 없어요':'이미지가 없어요')+'</div>';
+ }catch(e){$('#more').textContent='불러오기 실패 — 새로고침 해주세요'}
+ loading=false}
+new IntersectionObserver(es=>{if(es[0].isIntersecting&&next&&!loading)load(false)},{rootMargin:'600px'}).observe($('#more'));
+function setFilter(v){vf=v;$('#fup').classList.toggle('on',vf===1);$('#fdn').classList.toggle('on',vf===-1);updCnt();load(true)}
+async function boot(){try{const r=await api('folders');folders=r.folders}catch(e){$('#more').textContent='서버 연결 실패';return}
+ fillSel();folder=folders[0]?folders[0].id:'';$('#fsel').value=folder;updCnt();load(true)}
+$('#fsel').onchange=e=>{folder=e.target.value;updCnt();load(true)};
+$('#fup').onclick=()=>setFilter(vf===1?0:1);
+$('#fdn').onclick=()=>setFilter(vf===-1?0:-1);
+// 새 생성물·투표 동기화 (45초)
+setInterval(async()=>{if(document.hidden||loading)return;
+ try{if(maxId&&!vf){const r=await api('list',{q:q()+'&after='+maxId});if(r.items.length){const fr=await api('folders');folders=fr.folders;fillSel();
+   for(const it of r.items.reverse()){items.set(it.id,it);$('#list').prepend(card(it));maxId=Math.max(maxId,it.id)}updCnt();toast('새 이미지 '+r.items.length+'장')}}
+  const ids=[...items.keys()];if(ids.length){const L=await api('votes',{q:'ids='+ids.join(',')});for(const [id,it] of items){const v=(L[id]&&L[id].vote)||0;if(v!==it.vote){it.vote=v;const d=document.querySelector('.card[data-id="'+id+'"]');if(d)paint(it,d)}}}
+ }catch(e){}},45000);
+boot();
+</script>
+</body></html>
