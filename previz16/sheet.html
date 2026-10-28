@@ -73,7 +73,7 @@ async function sync(){try{const [a,b]=await Promise.all([rpc('previz_load',{p_pr
   catch(e){$('#sd').className='dot off';$('#stt').textContent='저장소 연결 실패 · 처음 구도로 보여줌';render()}}
 function info(id){const ini=D.shots[id].init;const doc=LIVE['shot:'+id];const s=doc&&doc.sheet;if(s&&s.still&&(!ini||s.t>ini.t))return {...s,mod:true};return {...ini,mod:false}}
 function refDoc(id){return REF['sheetref:'+id]||{removed:[],added:[],hist:[]}}
-const W=k=>k.startsWith('prop:')?3:k.startsWith('bread')?2:1;
+const W=k=>k.startsWith('prop:')?8:k.startsWith('bread')?3:1;
 function photos(id,vis){const rd=refDoc(id);const rm=new Set(rd.removed||[]);const seen=new Set();const L=[];
   for(const a of rd.added||[]){if(seen.has(a.id))continue;seen.add(a.id);L.push({...a,key:'added'})}
   const items=[];for(const v of vis||[]){if(D.skip.includes(v.k))continue;if(v.k.startsWith('breads:')){v.k.slice(7).split(',').slice(0,2).forEach(t=>items.push({k:'bread:'+t,s:v.f/2*W('bread')}))}else items.push({k:v.k,s:v.f*W(v.k)})}
